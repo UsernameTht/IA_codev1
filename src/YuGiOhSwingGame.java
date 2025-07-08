@@ -1,4 +1,3 @@
-// imports remain unchanged
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
@@ -34,7 +33,7 @@ public class YuGiOhSwingGame extends JFrame {
     private JLabel player1CardImage = new JLabel();
     private JLabel player2CardImage = new JLabel();
 
-    private final java.util.List<Monster> monsterList = MonsterFactory.getStarterMonsters();
+    private final java.util.List<Monster> monsterList = MonsterStats.getStarterMonsters();
 
     public YuGiOhSwingGame() {
         setTitle("Yu-Gi-Oh! Duel Simulator");
@@ -57,13 +56,6 @@ public class YuGiOhSwingGame extends JFrame {
         selectPanel.add(setButton);
         selectPanel.add(startButton);
 
-        JPanel infoPanel = new JPanel();
-        updateLPLabels();
-        infoPanel.add(lpLabel1);
-        infoPanel.add(lpLabel2);
-        infoPanel.add(phaseLabel);
-        infoPanel.add(turnLabel);
-
         JPanel buttonPanel = new JPanel();
         buttonPanel.add(nextPhaseButton);
         buttonPanel.add(nextTurnButton);
@@ -72,16 +64,41 @@ public class YuGiOhSwingGame extends JFrame {
         summonButton.setEnabled(false);
         setButton.setEnabled(false);
 
+        JPanel infoPanel = new JPanel();
+        infoPanel.setLayout(new GridLayout(2, 2));
+
+        lpLabel1.setFont(new Font("Arial", Font.BOLD, 18));
+        lpLabel1.setForeground(Color.RED);
+        lpLabel1.setHorizontalAlignment(SwingConstants.CENTER);
+        lpLabel1.setBorder(BorderFactory.createTitledBorder("Player 1"));
+
+        lpLabel2.setFont(new Font("Arial", Font.BOLD, 18));
+        lpLabel2.setForeground(Color.BLUE);
+        lpLabel2.setHorizontalAlignment(SwingConstants.CENTER);
+        lpLabel2.setBorder(BorderFactory.createTitledBorder("Player 2"));
+
+        phaseLabel.setFont(new Font("Arial", Font.PLAIN, 16));
+        turnLabel.setFont(new Font("Arial", Font.PLAIN, 16));
+
+        infoPanel.add(lpLabel1);
+        infoPanel.add(lpLabel2);
+        infoPanel.add(phaseLabel);
+        infoPanel.add(turnLabel);
+        updateLPLabels();
+
         JPanel cardPanel = new JPanel();
         cardPanel.setLayout(new GridLayout(1, 2, 40, 10));
         cardPanel.add(player1CardImage);
         cardPanel.add(player2CardImage);
 
+        JPanel southPanel = new JPanel(new BorderLayout());
+        southPanel.add(infoPanel, BorderLayout.CENTER);
+        southPanel.add(buttonPanel, BorderLayout.SOUTH);
+
         add(selectPanel, BorderLayout.NORTH);
         add(cardPanel, BorderLayout.CENTER);
         add(scrollPane, BorderLayout.WEST);
-        add(infoPanel, BorderLayout.SOUTH);
-        add(buttonPanel, BorderLayout.PAGE_END);
+        add(southPanel, BorderLayout.SOUTH);
 
         startButton.addActionListener(e -> {
             log("The duel begins!");
@@ -94,16 +111,8 @@ public class YuGiOhSwingGame extends JFrame {
         });
 
         summonButton.addActionListener(e -> {
-            if (!duelStarted) {
-                log("Start the duel first.");
-                return;
-            }
-            if (currentPhase != Phase.MAIN) {
-                log("You can only summon during the Main Phase.");
-                return;
-            }
-            if (summonUsed) {
-                log("You can only summon/set one monster per turn.");
+            if (!duelStarted || currentPhase != Phase.MAIN || summonUsed) {
+                log(!duelStarted ? "Start the duel first." : summonUsed ? "You can only summon/set one monster per turn." : "You can only summon during the Main Phase.");
                 return;
             }
             Monster m = monsterList.get(summonBox.getSelectedIndex());
@@ -115,16 +124,8 @@ public class YuGiOhSwingGame extends JFrame {
         });
 
         setButton.addActionListener(e -> {
-            if (!duelStarted) {
-                log("Start the duel first.");
-                return;
-            }
-            if (currentPhase != Phase.MAIN) {
-                log("You can only set during the Main Phase.");
-                return;
-            }
-            if (summonUsed) {
-                log("You can only summon/set one monster per turn.");
+            if (!duelStarted || currentPhase != Phase.MAIN || summonUsed) {
+                log(!duelStarted ? "Start the duel first." : summonUsed ? "You can only summon/set one monster per turn." : "You can only set during the Main Phase.");
                 return;
             }
             Monster m = monsterList.get(summonBox.getSelectedIndex());
@@ -159,6 +160,8 @@ public class YuGiOhSwingGame extends JFrame {
         setVisible(true);
     }
 
+
+
     private void switchTurn() {
         player1Turn = !player1Turn;
         currentPhase = Phase.MAIN;
@@ -168,7 +171,6 @@ public class YuGiOhSwingGame extends JFrame {
         turnLabel.setText("Turn: " + (player1Turn ? player1.getName() : player2.getName()));
         phaseLabel.setText("Phase: MAIN");
     }
-
 
     private void performAttack(Player attacker, Player defender) {
         Monster attackingMonster = attacker.getMonster();
@@ -213,7 +215,6 @@ public class YuGiOhSwingGame extends JFrame {
         phaseLabel.setText("Phase: " + currentPhase);
     }
 
-
     private void updateLPLabels() {
         lpLabel1.setText(player1.getName() + " LP: " + player1.getLifePoints());
         lpLabel2.setText(player2.getName() + " LP: " + player2.getLifePoints());
@@ -234,7 +235,7 @@ public class YuGiOhSwingGame extends JFrame {
         SwingUtilities.invokeLater(YuGiOhSwingGame::new);
     }
 
-    static class Player {
+    public static class Player {
         private String name;
         private int lifePoints;
         private Monster monster;
@@ -269,7 +270,7 @@ public class YuGiOhSwingGame extends JFrame {
         }
     }
 
-    static class Monster {
+    public static class Monster {
         private String name;
         private int attackPoints;
         private int defensePoints;
@@ -291,13 +292,14 @@ public class YuGiOhSwingGame extends JFrame {
         public int getDefensePoints() {
             return defensePoints;
         }
-
+        //where the image files are located
         public String getImageFullPath() {
             return "C:\\Users\\ryans\\IdeaProjects\\IA_codev1\\Resources\\" + name.toLowerCase().replace(" ", "_") + ".png";
         }
     }
 
-    public static class MonsterFactory {
+    //Monster Stats for the cards
+    public static class MonsterStats {
         public static java.util.List<Monster> getStarterMonsters() {
             java.util.List<Monster> list = new java.util.ArrayList<>();
             list.add(new Monster("Dark Magician", 2500, 2100));
@@ -308,6 +310,7 @@ public class YuGiOhSwingGame extends JFrame {
         }
     }
 }
+
 
 
 
