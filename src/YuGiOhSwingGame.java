@@ -2,7 +2,10 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.util.*;
+import javax.imageio.ImageIO;
+import java.io.File;
 import java.nio.file.*;
 
 public class YuGiOhSwingGame extends JFrame {
@@ -117,10 +120,11 @@ public class YuGiOhSwingGame extends JFrame {
             }
             Monster m = monsterList.get(summonBox.getSelectedIndex());
             Player currentPlayer = player1Turn ? player1 : player2;
-            currentPlayer.setMonster(m);
+            currentPlayer.setMonster(m, false);
             log(currentPlayer.getName() + " summons " + m.getName());
             setCardImage(player1Turn ? player1CardImage : player2CardImage, m);
             summonUsed = true;
+
         });
 
         setButton.addActionListener(e -> {
@@ -130,12 +134,16 @@ public class YuGiOhSwingGame extends JFrame {
             }
             Monster m = monsterList.get(summonBox.getSelectedIndex());
             Player currentPlayer = player1Turn ? player1 : player2;
-            currentPlayer.setMonster(m);
+            currentPlayer.setMonster(m, true);
             log(currentPlayer.getName() + " sets a card.");
             JLabel label = player1Turn ? player1CardImage : player2CardImage;
-            label.setIcon(new ImageIcon(new BufferedImage(150, 220, BufferedImage.TYPE_INT_ARGB)));
+            setCardFacedown(label);
+
+
             label.setToolTipText("Set Monster");
             summonUsed = true;
+
+
         });
 
         nextPhaseButton.addActionListener(e -> switchPhase());
@@ -144,22 +152,54 @@ public class YuGiOhSwingGame extends JFrame {
         player1CardImage.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent e) {
                 if (player1Turn && duelStarted && currentPhase == Phase.BATTLE && !attackUsed && player1.getMonster() != null && player2.getMonster() != null) {
+                    if (player1.isMonsterSet()) {
+                        log(player1.getName() + " cannot attack with a set monster!");
+                        return;
+                    }
                     performAttack(player1, player2);
                 }
+
+
             }
         });
 
         player2CardImage.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent e) {
                 if (!player1Turn && duelStarted && currentPhase == Phase.BATTLE && !attackUsed && player2.getMonster() != null && player1.getMonster() != null) {
+                    if (player2.isMonsterSet()) {
+                        log(player2.getName() + " cannot attack with a set monster!");
+                        return;
+                    }
                     performAttack(player2, player1);
                 }
+
             }
         });
 
         setVisible(true);
     }
 
+    private void setCardFacedown(JLabel label) {
+        try {
+            BufferedImage original = ImageIO.read(new File("C:\\Users\\ryans\\IdeaProjects\\IA_codev1\\Resources\\facedown_set.png"));
+            int width = 220;
+            int height = 150;
+            BufferedImage rotated = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g2 = rotated.createGraphics();
+            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.translate(width / 2.0, height / 2.0);
+            g2.rotate(Math.toRadians(90));
+            g2.drawImage(original, -original.getHeight() / 2, -original.getWidth() / 2, original.getHeight(), original.getWidth(), null);
+            g2.dispose();
+            label.setIcon(new ImageIcon(rotated));
+            label.setToolTipText("Set Monster");
+        } catch (IOException e) {
+            e.printStackTrace();
+            label.setIcon(null);
+        }
+    }
 
 
     private void switchTurn() {
@@ -225,11 +265,26 @@ public class YuGiOhSwingGame extends JFrame {
     }
 
     private void setCardImage(JLabel label, Monster monster) {
-        ImageIcon icon = new ImageIcon(monster.getImageFullPath());
-        Image scaledImage = icon.getImage().getScaledInstance(150, 220, Image.SCALE_SMOOTH);
-        label.setIcon(new ImageIcon(scaledImage));
-        label.setToolTipText("ATK: " + monster.getAttackPoints() + " / DEF: " + monster.getDefensePoints());
+        try {
+            BufferedImage original = ImageIO.read(new File(monster.getImageFullPath()));
+            Image scaledImage = original.getScaledInstance(150, 220, Image.SCALE_SMOOTH);
+            BufferedImage resized = new BufferedImage(150, 220, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g2 = resized.createGraphics();
+            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.drawImage(scaledImage, 0, 0, null);
+            g2.dispose();
+            label.setIcon(new ImageIcon(resized));
+            label.setToolTipText("ATK: " + monster.getAttackPoints() + " / DEF: " + monster.getDefensePoints());
+        } catch (IOException e) {
+            e.printStackTrace();
+            label.setIcon(null);
+        }
     }
+
+
+
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(YuGiOhSwingGame::new);
@@ -239,6 +294,7 @@ public class YuGiOhSwingGame extends JFrame {
         private String name;
         private int lifePoints;
         private Monster monster;
+        private boolean monsterSet = false;
 
         public Player(String name, int lifePoints) {
             this.name = name;
@@ -261,14 +317,20 @@ public class YuGiOhSwingGame extends JFrame {
             return lifePoints <= 0;
         }
 
-        public void setMonster(Monster monster) {
+        public void setMonster(Monster monster, boolean isSet) {
             this.monster = monster;
+            this.monsterSet = isSet;
         }
 
         public Monster getMonster() {
             return monster;
         }
+
+        public boolean isMonsterSet() {
+            return monsterSet;
+        }
     }
+
 
     public static class Monster {
         private String name;
