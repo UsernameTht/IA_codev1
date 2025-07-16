@@ -4,6 +4,7 @@ import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.*;
+import java.io.InputStream;
 import javax.imageio.ImageIO;
 import java.io.File;
 import java.nio.file.*;
@@ -181,25 +182,41 @@ public class YuGiOhSwingGame extends JFrame {
 
     private void setCardFacedown(JLabel label) {
         try {
-            BufferedImage original = ImageIO.read(new File("C:\\Users\\ryans\\IdeaProjects\\IA_codev1\\Resources\\facedown_set.png"));
-            int width = 220;
-            int height = 150;
-            BufferedImage rotated = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+            BufferedImage original = ImageIO.read(getClass().getResource("/facedown_set.png"));
+            if (original == null) throw new IOException("facedown_set.png not found in resources.");
+
+            int w = original.getWidth();
+            int h = original.getHeight();
+
+            // Rotate the image 90° clockwise (to landscape)
+            BufferedImage rotated = new BufferedImage(h, w, BufferedImage.TYPE_INT_ARGB);
             Graphics2D g2 = rotated.createGraphics();
-            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-            g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.translate(width / 2.0, height / 2.0);
-            g2.rotate(Math.toRadians(90));
-            g2.drawImage(original, -original.getHeight() / 2, -original.getWidth() / 2, original.getHeight(), original.getWidth(), null);
+
+            // Transparent background
+            g2.setComposite(AlphaComposite.Clear);
+            g2.fillRect(0, 0, h, w);
+            g2.setComposite(AlphaComposite.SrcOver);
+
+            // Rotate
+            g2.translate(h / 2.0, w / 2.0);
+            g2.rotate(Math.toRadians(90)); // Clockwise
+            g2.drawImage(original, -w / 2, -h / 2, null);
             g2.dispose();
-            label.setIcon(new ImageIcon(rotated));
+
+            // Now scale the rotated image
+            Image scaled = rotated.getScaledInstance(220, 150, Image.SCALE_SMOOTH); // Landscape
+            label.setIcon(new ImageIcon(scaled));
             label.setToolTipText("Set Monster");
+
         } catch (IOException e) {
             e.printStackTrace();
             label.setIcon(null);
         }
     }
+
+
+
+
 
 
     private void switchTurn() {
@@ -266,7 +283,7 @@ public class YuGiOhSwingGame extends JFrame {
 
     private void setCardImage(JLabel label, Monster monster) {
         try {
-            BufferedImage original = ImageIO.read(new File(monster.getImageFullPath()));
+            BufferedImage original = ImageIO.read(getClass().getResource("/" + monster.getImageFileName()));
             Image scaledImage = original.getScaledInstance(150, 220, Image.SCALE_SMOOTH);
             BufferedImage resized = new BufferedImage(150, 220, BufferedImage.TYPE_INT_ARGB);
             Graphics2D g2 = resized.createGraphics();
@@ -277,11 +294,13 @@ public class YuGiOhSwingGame extends JFrame {
             g2.dispose();
             label.setIcon(new ImageIcon(resized));
             label.setToolTipText("ATK: " + monster.getAttackPoints() + " / DEF: " + monster.getDefensePoints());
-        } catch (IOException e) {
+        } catch (IOException | IllegalArgumentException e) {
             e.printStackTrace();
             label.setIcon(null);
         }
     }
+
+
 
 
 
@@ -358,6 +377,11 @@ public class YuGiOhSwingGame extends JFrame {
         public String getImageFullPath() {
             return "C:\\Users\\ryans\\IdeaProjects\\IA_codev1\\Resources\\" + name.toLowerCase().replace(" ", "_") + ".png";
         }
+
+        public String getImageFileName() {
+            return name.toLowerCase().replace(" ", "_") + ".png";
+        }
+
     }
 
     //Monster Stats for the cards
