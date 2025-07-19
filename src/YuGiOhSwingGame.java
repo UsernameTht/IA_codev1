@@ -280,19 +280,29 @@ public class YuGiOhSwingGame extends JFrame {
 
         Player currentPlayer = player1Turn ? player1 : player2;
 
-        // Draw logic
+        // Draw logic with deck-out loss
         if (isFirstTurn && !player1Turn) {
-            if (!currentPlayer.getDeck().isEmpty()) {
-                currentPlayer.getHand().add(currentPlayer.getDeck().remove(0));
-                log(currentPlayer.getName() + " draws an additional card.");
+            if (currentPlayer.getDeck().isEmpty()) {
+                log(currentPlayer.getName() + " has no cards to draw and loses the duel!");
+                currentPlayer.takeDamage(currentPlayer.getLifePoints());
+                updateLPLabels();
+                disableAllButtons();
+                return;
             }
+            currentPlayer.getHand().add(currentPlayer.getDeck().remove(0));
+            log(currentPlayer.getName() + " draws an additional card.");
             isFirstTurn = false;
         } else {
-            if (!currentPlayer.getDeck().isEmpty()) {
-                Monster drawn = currentPlayer.getDeck().remove(0);
-                currentPlayer.getHand().add(drawn);
-                log(currentPlayer.getName() + " draws " + drawn.getName());
+            if (currentPlayer.getDeck().isEmpty()) {
+                log(currentPlayer.getName() + " has no cards to draw and loses the duel!");
+                currentPlayer.takeDamage(currentPlayer.getLifePoints());
+                updateLPLabels();
+                disableAllButtons();
+                return;
             }
+            Monster drawn = currentPlayer.getDeck().remove(0);
+            currentPlayer.getHand().add(drawn);
+            log(currentPlayer.getName() + " draws " + drawn.getName());
         }
 
         nextPhaseButton.setEnabled(true);
@@ -529,7 +539,7 @@ public class YuGiOhSwingGame extends JFrame {
         }
         //where the image files are located
         public String getImageFullPath() {
-            return "C:\\Users\\ryans\\IdeaProjects\\IA_codev1\\Resources\\" + name.toLowerCase().replace(" ", "_") + ".png";
+            return "\\Resources\\" + name.toLowerCase().replace(" ", "_") + ".png";
         }
 
         public String getImageFileName() {
@@ -557,6 +567,24 @@ public class YuGiOhSwingGame extends JFrame {
             return list;
         }
     }
+
+//    private void promptFlipSummon(Player.MonsterSlot slot) {
+//        if (!duelStarted || currentPhase != Phase.MAIN || summonUsed || !slot.isSet()) return;
+//
+//        int choice = JOptionPane.showConfirmDialog(this,
+//                "Flip Summon this monster?",
+//                "Flip Summon",
+//                JOptionPane.YES_NO_OPTION);
+//
+//        if (choice == JOptionPane.YES_OPTION) {
+//            slot.reveal();
+//            summonUsed = true;
+//            Player current = player1Turn ? player1 : player2;
+//            log(current.getName() + " flip summons " + slot.getMonster().getName());
+//            refreshField();
+//        }
+//    }
+
     private void refreshField() {
         for (int i = 0; i < 5; i++) {
             updateMonsterLabel(player1MonsterLabels.get(i), i < player1.getField().size() ? player1.getField().get(i) : null);
