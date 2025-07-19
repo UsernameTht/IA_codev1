@@ -5,15 +5,14 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.List;
 import java.util.ArrayList;
-import java.io.InputStream;
 import javax.imageio.ImageIO;
-import java.io.File;
-import java.nio.file.*;
 
 public class YuGiOhSwingGame extends JFrame {
 
     private enum Phase { MAIN, BATTLE, END }
-
+    private boolean hasFirstBattlePhaseHappened = false;
+    private boolean isFirstTurn = true;
+    private int selectedAttackerIndex = -1; // -1 = none selected
     private Player player1 = new Player("Player 1", 4000);
     private Player player2 = new Player("Player 2", 4000);
     private boolean player1Turn = true;
@@ -115,36 +114,60 @@ public class YuGiOhSwingGame extends JFrame {
 
             final int index = i;
 
+// Player 1 monster slot
             p1Slot.addMouseListener(new MouseAdapter() {
                 public void mouseClicked(MouseEvent e) {
-                    if (player1Turn && duelStarted && currentPhase == Phase.BATTLE ) {
+                    if (!duelStarted || currentPhase != Phase.BATTLE) return;
+
+                    if (player1Turn) {
                         if (index >= player1.getField().size()) return;
-                        Player.MonsterSlot atkSlot = player1.getField().get(index);
-                        if (atkSlot.isSet()) {
-                            log(player1.getName() + " cannot attack with a set monster!");
+                        Player.MonsterSlot attacker = player1.getField().get(index);
+                        if (attacker.isSet() || attacker.hasAttacked()) {
+                            log("You can't select this monster for attack.");
                             return;
                         }
-                        performAttack(player1, player2);
+                        selectedAttackerIndex = index;
+                        log("Selected " + attacker.getMonster().getName() + " to attack.");
+                    } else {
+                        if (selectedAttackerIndex == -1) return;
+                        Player.MonsterSlot attacker = player2.getField().get(selectedAttackerIndex);
+                        Player.MonsterSlot defender = index < player1.getField().size()
+                                ? player1.getField().get(index)
+                                : null;
+                        performAttack(attacker, defender, player2, player1);
+                        selectedAttackerIndex = -1;
                         refreshField();
                     }
                 }
             });
 
+// Player 2 monster slot
             p2Slot.addMouseListener(new MouseAdapter() {
                 public void mouseClicked(MouseEvent e) {
-                    if (!player1Turn && duelStarted && currentPhase == Phase.BATTLE ) {
+                    if (!duelStarted || currentPhase != Phase.BATTLE) return;
+
+                    if (!player1Turn) {
                         if (index >= player2.getField().size()) return;
-                        Player.MonsterSlot atkSlot = player2.getField().get(index);
-                        if (atkSlot.isSet()) {
-                            log(player2.getName() + " cannot attack with a set monster!");
+                        Player.MonsterSlot attacker = player2.getField().get(index);
+                        if (attacker.isSet() || attacker.hasAttacked()) {
+                            log("You can't select this monster for attack.");
                             return;
                         }
-                        performAttack(player2, player1);
-
+                        selectedAttackerIndex = index;
+                        log("Selected " + attacker.getMonster().getName() + " to attack.");
+                    } else {
+                        if (selectedAttackerIndex == -1) return;
+                        Player.MonsterSlot attacker = player1.getField().get(selectedAttackerIndex);
+                        Player.MonsterSlot defender = index < player2.getField().size()
+                                ? player2.getField().get(index)
+                                : null;
+                        performAttack(attacker, defender, player1, player2);
+                        selectedAttackerIndex = -1;
                         refreshField();
                     }
                 }
             });
+
         }
 
 
@@ -171,37 +194,41 @@ public class YuGiOhSwingGame extends JFrame {
             summonButton.setEnabled(true);
             setButton.setEnabled(true);
             startButton.setEnabled(false);
+            refreshHandComboBox(); //  Populate hand combo at game start
         });
+
 
         summonButton.addActionListener(e -> {
-            if (!duelStarted || currentPhase != Phase.MAIN || summonUsed) {
-                log(!duelStarted ? "Start the duel first." : summonUsed ? "You can only summon/set one monster per turn." : "You can only summon during the Main Phase.");
+            Player currentPlayer = player1Turn ? player1 : player2;
+            if (!duelStarted || currentPhase != Phase.MAIN || summonUsed || currentPlayer.getHand().isEmpty()) {
+                log(!duelStarted ? "Start the duel first." : summonUsed ? "You can only summon/set once per turn." : "No monsters in hand.");
                 return;
             }
-            Monster m = monsterList.get(summonBox.getSelectedIndex());
-            Player currentPlayer = player1Turn ? player1 : player2;
+
+            Monster m = currentPlayer.getHand().remove(summonBox.getSelectedIndex());
             currentPlayer.summon(m, false);
             log(currentPlayer.getName() + " summons " + m.getName());
-            refreshField();
             summonUsed = true;
-
+            refreshField();
+            refreshHandComboBox();
         });
+
 
         setButton.addActionListener(e -> {
-            if (!duelStarted || currentPhase != Phase.MAIN || summonUsed) {
-                log(!duelStarted ? "Start the duel first." : summonUsed ? "You can only summon/set one monster per turn." : "You can only set during the Main Phase.");
+            Player currentPlayer = player1Turn ? player1 : player2;
+            if (!duelStarted || currentPhase != Phase.MAIN || summonUsed || currentPlayer.getHand().isEmpty()) {
+                log(!duelStarted ? "Start the duel first." : summonUsed ? "You can only summon/set once per turn." : "No monsters in hand.");
                 return;
             }
-            Monster m = monsterList.get(summonBox.getSelectedIndex());
-            Player currentPlayer = player1Turn ? player1 : player2;
+
+            Monster m = currentPlayer.getHand().remove(summonBox.getSelectedIndex());
             currentPlayer.summon(m, true);
-
             log(currentPlayer.getName() + " sets a card.");
-            refreshField();
             summonUsed = true;
-
-
+            refreshField();
+            refreshHandComboBox();
         });
+
 
         nextPhaseButton.addActionListener(e -> switchPhase());
         nextTurnButton.addActionListener(e -> switchTurn());
@@ -257,83 +284,109 @@ public class YuGiOhSwingGame extends JFrame {
     private void switchTurn() {
         player1Turn = !player1Turn;
         currentPhase = Phase.MAIN;
-        for (Player.MonsterSlot slot : (player1Turn ? player1 : player2).getField()) {
+        selectedAttackerIndex = -1;
+        summonUsed = false;
+
+        Player currentPlayer = player1Turn ? player1 : player2;
+
+        // Draw logic
+        if (isFirstTurn && !player1Turn) {
+            if (!currentPlayer.getDeck().isEmpty()) {
+                currentPlayer.getHand().add(currentPlayer.getDeck().remove(0));
+                log(currentPlayer.getName() + " draws an additional card.");
+            }
+            isFirstTurn = false;
+        } else {
+            if (!currentPlayer.getDeck().isEmpty()) {
+                Monster drawn = currentPlayer.getDeck().remove(0);
+                currentPlayer.getHand().add(drawn);
+                log(currentPlayer.getName() + " draws " + drawn.getName());
+            }
+        }
+
+        nextPhaseButton.setEnabled(true);
+        nextTurnButton.setEnabled(true);
+        summonButton.setEnabled(true);
+        setButton.setEnabled(true);
+
+        List<Player.MonsterSlot> field = currentPlayer.getField();
+        for (Player.MonsterSlot slot : field) {
             slot.markAttacked(false);
         }
-        summonUsed = false;
-        log("It's now " + (player1Turn ? player1.getName() : player2.getName()) + "'s turn.");
-        turnLabel.setText("Turn: " + (player1Turn ? player1.getName() : player2.getName()));
+
+        log("It's now " + currentPlayer.getName() + "'s turn.");
+        turnLabel.setText("Turn: " + currentPlayer.getName());
         phaseLabel.setText("Phase: MAIN");
+        refreshField();
+        refreshHandComboBox();
     }
 
-    private void performAttack(Player attacker, Player defender) {
-        java.util.List<Player.MonsterSlot> atkField = attacker.getField();
-        java.util.List<Player.MonsterSlot> defField = defender.getField();
 
-        if (atkField.isEmpty()) {
-            log(attacker.getName() + " has no monsters to attack with.");
-            return;
-        }
 
-        for (int i = 0; i < atkField.size(); i++) {
-            Player.MonsterSlot atkSlot = atkField.get(i);
-            if (atkSlot.isSet() || atkSlot.hasAttacked()) continue;
+    private void performAttack(Player.MonsterSlot attackerSlot, Player.MonsterSlot defenderSlot, Player attacker, Player defender) {
+        if (attackerSlot == null || attackerSlot.hasAttacked()) return;
 
-            Monster atkMonster = atkSlot.getMonster();
-            log(attacker.getName() + "'s " + atkMonster.getName() + " attacks!");
+        Monster atkMonster = attackerSlot.getMonster();
+        log(attacker.getName() + "'s " + atkMonster.getName() + " attacks!");
 
-            if (defField.isEmpty()) {
-                defender.takeDamage(atkMonster.getAttackPoints());
-                log("Direct attack! " + defender.getName() + " takes " + atkMonster.getAttackPoints() + " damage!");
-            } else {
-                Player.MonsterSlot defSlot = defField.get(0); // attacking first monster
-                Monster defMonster = defSlot.getMonster();
+        if (defenderSlot == null) {
+            // Direct attack
+            defender.takeDamage(atkMonster.getAttackPoints());
+            log("Direct attack! " + defender.getName() + " takes " + atkMonster.getAttackPoints() + " damage!");
+        } else {
+            Monster defMonster = defenderSlot.getMonster();
 
-                if (defSlot.isSet()) {
-                    log(defender.getName() + "'s set monster is attacked!");
-                    defSlot.reveal();
-                    if (atkMonster.getAttackPoints() > defMonster.getDefensePoints()) {
-                        defField.remove(defSlot);
-                        log("The set monster was destroyed!");
-                    } else {
-                        log("The set monster defends successfully. No damage.");
-                    }
+            if (defenderSlot.isSet()) {
+                defenderSlot.reveal();
+                log(defender.getName() + "'s set monster is attacked!");
+
+                int atk = atkMonster.getAttackPoints();
+                int def = defMonster.getDefensePoints();
+
+                if (atk > def) {
+                    defender.getField().remove(defenderSlot);
+                    log("Set monster was destroyed! No damage to player.");
+                } else if (atk < def) {
+                    int dmg = def - atk;
+                    attacker.takeDamage(dmg);
+                    log("Set monster defends successfully! " + attacker.getName() + " takes " + dmg + " damage!");
                 } else {
-                    if (atkMonster.getAttackPoints() > defMonster.getAttackPoints()) {
-                        int damage = atkMonster.getAttackPoints() - defMonster.getAttackPoints();
-                        defender.takeDamage(damage);
-                        defField.remove(defSlot);
-                        log(defender.getName() + "'s " + defMonster.getName() + " was destroyed and takes " + damage + " damage.");
-                    } else if (atkMonster.getAttackPoints() < defMonster.getAttackPoints()) {
-                        int damage = defMonster.getAttackPoints() - atkMonster.getAttackPoints();
-                        attacker.takeDamage(damage);
-                        atkField.remove(atkSlot); // remove attacking monster
-                        log(attacker.getName() + "'s monster was destroyed and takes " + damage + " damage!");
-                        i--; // adjust index after remove
-                        continue; // skip marking attack
-                    } else {
-                        defField.remove(defSlot);
-                        atkField.remove(atkSlot);
-                        log("Both monsters are destroyed in battle!");
-                        i--; // adjust index
-                        continue;
-                    }
+                    log("Attack equals defense. No damage, no destruction.");
+                }
+            } else {
+                // Face-up defense: use ATK vs ATK
+                int atk = atkMonster.getAttackPoints();
+                int def = defMonster.getAttackPoints();
+
+                if (atk > def) {
+                    int dmg = atk - def;
+                    defender.takeDamage(dmg);
+                    defender.getField().remove(defenderSlot);
+                    log(defender.getName() + "'s " + defMonster.getName() + " was destroyed and takes " + dmg + " damage!");
+                } else if (atk < def) {
+                    int dmg = def - atk;
+                    attacker.takeDamage(dmg);
+                    attacker.getField().remove(attackerSlot);
+                    log(attacker.getName() + "'s monster was destroyed and takes " + dmg + " damage!");
+                } else {
+                    // Equal stats: both destroyed
+                    attacker.getField().remove(attackerSlot);
+                    defender.getField().remove(defenderSlot);
+                    log("Both monsters destroyed!");
                 }
             }
-
-            atkSlot.markAttacked();
-            updateLPLabels();
-            refreshField();
-
-            if (defender.isDefeated()) {
-                log(defender.getName() + " has lost the duel!");
-                disableAllButtons();
-                break;
-            }
         }
 
+        attackerSlot.markAttacked();
+        updateLPLabels();
         refreshField();
+
+        if (defender.isDefeated()) {
+            log(defender.getName() + " has lost the duel!");
+            disableAllButtons();
+        }
     }
+
 
     private void disableAllButtons() {
         nextPhaseButton.setEnabled(false);
@@ -346,18 +399,34 @@ public class YuGiOhSwingGame extends JFrame {
     private void switchPhase() {
         switch (currentPhase) {
             case MAIN -> {
+                if (isFirstTurn) {
+                    currentPhase = Phase.END; // skip battle phase on first turn
+                    log("No Battle Phase on the first turn.");
+                    nextPhaseButton.setEnabled(false);
+                    break;
+                }
                 currentPhase = Phase.BATTLE;
                 log("Entered Battle Phase");
+                nextPhaseButton.setEnabled(true);
             }
             case BATTLE -> {
                 currentPhase = Phase.END;
                 log("Entered End Phase");
+                nextPhaseButton.setEnabled(false);
             }
             case END -> {
                 log("End Phase complete. Use Next Turn.");
             }
         }
         phaseLabel.setText("Phase: " + currentPhase);
+    }
+
+    private void refreshHandComboBox() {
+        summonBox.removeAllItems();
+        Player current = player1Turn ? player1 : player2;
+        for (Monster m : current.getHand()) {
+            summonBox.addItem(m.getName());
+        }
     }
 
     private void updateLPLabels() {
@@ -401,75 +470,47 @@ public class YuGiOhSwingGame extends JFrame {
         private String name;
         private int lifePoints;
         private List<MonsterSlot> field = new ArrayList<>();
+        private List<Monster> hand = new ArrayList<>();
+        private List<Monster> deck = new ArrayList<>();
 
         public Player(String name, int lifePoints) {
             this.name = name;
             this.lifePoints = lifePoints;
+            deck = new ArrayList<>(MonsterStats.getStarterMonsters());
+            java.util.Collections.shuffle(deck);
+            for (int i = 0; i < 5 && !deck.isEmpty(); i++) {
+                hand.add(deck.remove(0));
+            }
         }
 
-        public String getName() {
-            return name;
-        }
-
-        public int getLifePoints() {
-            return lifePoints;
-        }
-
-        public void takeDamage(int damage) {
-            this.lifePoints = Math.max(0, lifePoints - damage);
-        }
-
-        public boolean isDefeated() {
-            return lifePoints <= 0;
-        }
-
-        public List<MonsterSlot> getField() {
-            return field;
-        }
-
-        public void summon(Monster m, boolean isSet) {
-            field.add(new MonsterSlot(m, isSet));
-        }
-
-        public void clearField() {
-            field.clear();
-        }
+        public String getName() { return name; }
+        public int getLifePoints() { return lifePoints; }
+        public void takeDamage(int damage) { this.lifePoints = Math.max(0, lifePoints - damage); }
+        public boolean isDefeated() { return lifePoints <= 0; }
+        public List<MonsterSlot> getField() { return field; }
+        public List<Monster> getHand() { return hand; }
+        public List<Monster> getDeck() { return deck; }
+        public void summon(Monster m, boolean isSet) { field.add(new MonsterSlot(m, isSet)); }
+        public void clearField() { field.clear(); }
 
         public static class MonsterSlot {
             private Monster monster;
             private boolean isSet;
             private boolean hasAttacked;
-
             public MonsterSlot(Monster monster, boolean isSet) {
                 this.monster = monster;
                 this.isSet = isSet;
                 this.hasAttacked = false;
             }
-
-            public Monster getMonster() {
-                return monster;
-            }
-
-            public boolean isSet() {
-                return isSet;
-            }
-
-            public void reveal() {
-                isSet = false;
-            }
-
-            public boolean hasAttacked() {
-                return hasAttacked;
-            }
-
-            public void markAttacked() {
-                hasAttacked = true;
-            }
-            public void markAttacked(boolean value) {
-                hasAttacked = value;
-            }
+            public Monster getMonster() { return monster; }
+            public boolean isSet() { return isSet; }
+            public void reveal() { isSet = false; }
+            public boolean hasAttacked() { return hasAttacked; }
+            public void markAttacked() { hasAttacked = true; }
+            public void markAttacked(boolean value) { hasAttacked = value; }
         }
     }
+
 
 
 
@@ -514,6 +555,14 @@ public class YuGiOhSwingGame extends JFrame {
             list.add(new Monster("Blue-Eyes White Dragon", 3000, 2500));
             list.add(new Monster("Red-Eyes Black Dragon", 2400, 2000));
             list.add(new Monster("Summoned Skull", 2500, 1200));
+            list.add(new Monster("Celtic Guardian", 1400, 1200));
+            list.add(new Monster("Kuriboh", 300, 200));
+            list.add(new Monster("Mystical Elf", 800, 2000));
+            list.add(new Monster("La Jinn", 1800, 1000));
+            list.add(new Monster("Battle Ox", 1700, 1000));
+            list.add(new Monster("Harpie Lady", 1300, 1400));
+            list.add(new Monster("Axe Raider", 1700, 1150));
+            list.add(new Monster("Vorse Raider", 1900, 1200));
             return list;
         }
     }
