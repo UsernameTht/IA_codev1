@@ -3,10 +3,10 @@ import java.util.LinkedList;
 import java.util.List;
 
 public class Deck {
-    private LinkedList<YuGiOhSwingGame.Monster> cards;
+    private final LinkedList<Monster> cards;
 
     public Deck() {
-        this.cards = new LinkedList<>(YuGiOhSwingGame.MonsterStats.getStarterMonsters());
+        this.cards = new LinkedList<>(MonsterStats.getStarterMonsters());
         shuffle();
     }
 
@@ -22,16 +22,16 @@ public class Deck {
         return cards.size();
     }
 
-    public YuGiOhSwingGame.Monster drawCard() {
+    public Monster drawCard() {
         if (cards.isEmpty()) return null;
         return cards.poll();
     }
 
-    public void addCard(YuGiOhSwingGame.Monster monster) {
+    public void addCard(Monster monster) {
         cards.add(monster);
     }
 
-    public List<YuGiOhSwingGame.Monster> getCards() {
+    public List<Monster> getCards() {
         return Collections.unmodifiableList(cards);
     }
 }
