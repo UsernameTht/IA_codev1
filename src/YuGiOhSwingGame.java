@@ -6,7 +6,9 @@ import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class YuGiOhSwingGame extends JFrame {
 
@@ -26,6 +28,8 @@ public class YuGiOhSwingGame extends JFrame {
 
     private final List<JLabel> player1MonsterLabels = new ArrayList<>();
     private final List<JLabel> player2MonsterLabels = new ArrayList<>();
+
+    private final Map<String, ImageIcon> iconCache = new HashMap<>();
 
     private final Player player1 = new Player("Player 1", 4000);
     private final Player player2 = new Player("Player 2", 4000);
@@ -250,6 +254,7 @@ public class YuGiOhSwingGame extends JFrame {
         currentPhase = Phase.MAIN;
         selectedAttackerIndex = -1;
         summonUsed = false;
+        nextPhaseButton.setEnabled(true);
 
         if (!drawCardFor(currentPlayer, opponent)) {
             return;
@@ -450,19 +455,23 @@ public class YuGiOhSwingGame extends JFrame {
     }
 
     private ImageIcon loadCardIcon(String resourcePath, boolean rotate90, int width, int height) {
+        String cacheKey = resourcePath + "|" + rotate90 + "|" + width + "x" + height;
+        if (iconCache.containsKey(cacheKey)) {
+            return iconCache.get(cacheKey);
+        }
+
         try {
             BufferedImage image = ImageIO.read(getClass().getResource(resourcePath));
             if (image == null) {
                 throw new IOException("Resource not found: " + resourcePath);
             }
+
             if (rotate90) {
                 int w = image.getWidth();
                 int h = image.getHeight();
                 BufferedImage rotated = new BufferedImage(h, w, BufferedImage.TYPE_INT_ARGB);
                 Graphics2D g2 = rotated.createGraphics();
-                g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-                g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                applyHighQualityRendering(g2);
                 g2.translate(h / 2.0, w / 2.0);
                 g2.rotate(Math.toRadians(90));
                 g2.translate(-w / 2.0, -h / 2.0);
@@ -470,12 +479,26 @@ public class YuGiOhSwingGame extends JFrame {
                 g2.dispose();
                 image = rotated;
             }
-            Image scaledImage = image.getScaledInstance(width, height, Image.SCALE_SMOOTH);
-            return new ImageIcon(scaledImage);
+
+            BufferedImage scaled = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g2d = scaled.createGraphics();
+            applyHighQualityRendering(g2d);
+            g2d.drawImage(image, 0, 0, width, height, null);
+            g2d.dispose();
+
+            ImageIcon icon = new ImageIcon(scaled);
+            iconCache.put(cacheKey, icon);
+            return icon;
         } catch (IOException | IllegalArgumentException e) {
             e.printStackTrace();
             return null;
         }
+    }
+
+    private void applyHighQualityRendering(Graphics2D g2d) {
+        g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     }
 
     private void log(String text) {
